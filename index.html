@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Injury Prevention Flexibility Tracker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-emerald-50 min-h-screen">
+<div class="max-w-4xl mx-auto p-4">
+  <h1 class="text-2xl font-bold text-emerald-800 mb-1">Flexibility Routine Tracker</h1>
+  <p class="text-emerald-600 text-sm mb-4">Log your stretches daily. Earn badges for 5+ consecutive days per muscle group.</p>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <!-- Log Panel -->
+    <div class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-4 md:col-span-1">
+      <h2 class="font-semibold text-emerald-700 mb-3">Log Today's Stretches</h2>
+      <div class="text-xs text-emerald-500 mb-3" id="todayLabel"></div>
+      <div id="logForm" class="space-y-2"></div>
+      <button onclick="saveLog()" class="w-full mt-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition">Save Today's Log</button>
+      <div id="saveMsg" class="hidden mt-2 text-center text-xs text-green-600 font-semibold">✓ Saved!</div>
+
+      <!-- Badges -->
+      <div class="mt-4 border-t border-emerald-100 pt-3">
+        <div class="text-xs font-semibold text-emerald-500 uppercase mb-2">Badges (5+ day streaks)</div>
+        <div id="badges" class="flex flex-wrap gap-1"></div>
+      </div>
+    </div>
+
+    <!-- Heatmap -->
+    <div class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-4 md:col-span-2">
+      <h2 class="font-semibold text-emerald-700 mb-3">Weekly Coverage Heatmap</h2>
+      <div id="heatmap" class="overflow-x-auto"></div>
+      <div class="flex items-center gap-2 mt-3 text-xs text-gray-500">
+        <span>Less</span>
+        <div class="flex gap-1">
+          <div class="w-4 h-4 rounded bg-gray-100"></div>
+          <div class="w-4 h-4 rounded bg-emerald-200"></div>
+          <div class="w-4 h-4 rounded bg-emerald-400"></div>
+          <div class="w-4 h-4 rounded bg-emerald-600"></div>
+        </div>
+        <span>More time</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MUSCLES = [
+  'Hamstrings','Hip Flexors','Quadriceps','Calves','IT Band',
+  'Shoulders','Chest','Lower Back','Hip Rotators','Neck'
+];
+
+const TODAY = new Date().toISOString().slice(0,10);
+document.getElementById('todayLabel').textContent = `Today: ${TODAY}`;
+
+let data = JSON.parse(localStorage.getItem('flexTracker11') || '{}');
+
+function getWeekDates() {
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return dates;
+}
+
+function buildLogForm() {
+  const form = document.getElementById('logForm');
+  const todayData = data[TODAY] || {};
+  form.innerHTML = MUSCLES.map(m => `
+    <div class="flex items-center justify-between gap-2">
+      <label class="text-sm text-gray-600 flex-1">${m}</label>
+      <div class="flex items-center gap-1">
+        <input type="number" id="inp-${m.replace(/ /g,'_')}" value="${todayData[m]||0}"
+          min="0" max="600" step="15"
+          class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-center text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          aria-label="${m} stretch seconds">
+        <span class="text-xs text-gray-400">sec</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function saveLog() {
+  const entry = {};
+  MUSCLES.forEach(m => {
+    const val = parseInt(document.getElementById('inp-' + m.replace(/ /g,'_')).value) || 0;
+    if (val > 0) entry[m] = val;
+  });
+  data[TODAY] = entry;
+  localStorage.setItem('flexTracker11', JSON.stringify(data));
+  document.getElementById('saveMsg').classList.remove('hidden');
+  setTimeout(() => document.getElementById('saveMsg').classList.add('hidden'), 2000);
+  renderHeatmap();
+  renderBadges();
+}
+
+function renderHeatmap() {
+  const dates = getWeekDates();
+  const dayLabels = dates.map(d => new Date(d + 'T12:00').toLocaleDateString('en', {weekday:'short'}));
+
+  let html = '<table class="w-full text-xs">';
+  // Header row (dates)
+  html += '<thead><tr><th class="text-left pr-2 py-1 text-gray-400 w-24">Muscle</th>';
+  dates.forEach((d,i) => {
+    const isToday = d === TODAY;
+    html += `<th class="text-center w-10 py-1 ${isToday ? 'text-emerald-600 font-bold' : 'text-gray-400'}">${dayLabels[i]}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  MUSCLES.forEach(m => {
+    html += `<tr><td class="pr-2 py-0.5 text-gray-600 text-xs whitespace-nowrap">${m}</td>`;
+    dates.forEach(d => {
+      const secs = (data[d] && data[d][m]) || 0;
+      let bg = 'bg-gray-100';
+      if (secs > 0 && secs <= 30) bg = 'bg-emerald-200';
+      else if (secs > 30 && secs <= 90) bg = 'bg-emerald-400';
+      else if (secs > 90) bg = 'bg-emerald-600';
+      const label = secs > 0 ? `${secs}s` : '';
+      html += `<td class="text-center py-0.5 px-0.5"><div class="${bg} rounded text-white h-6 flex items-center justify-center text-xs font-bold" title="${m}: ${secs}s on ${d}">${label}</div></td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('heatmap').innerHTML = html;
+}
+
+function getStreak(muscle) {
+  let streak = 0;
+  const check = new Date(TODAY);
+  while (true) {
+    const d = check.toISOString().slice(0,10);
+    if (data[d] && data[d][muscle]) { streak++; check.setDate(check.getDate()-1); }
+    else break;
+    if (streak > 365) break;
+  }
+  return streak;
+}
+
+function renderBadges() {
+  const badges = document.getElementById('badges');
+  badges.innerHTML = '';
+  MUSCLES.forEach(m => {
+    const streak = getStreak(m);
+    if (streak >= 5) {
+      const short = m.split(' ')[0];
+      badges.innerHTML += `<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold" title="${m}: ${streak} day streak">🏅 ${short}</span>`;
+    }
+  });
+  if (!badges.innerHTML) badges.innerHTML = '<span class="text-xs text-gray-400">Stretch 5+ days to earn badges!</span>';
+}
+
+buildLogForm();
+renderHeatmap();
+renderBadges();
+</script>
+</body>
+</html>
